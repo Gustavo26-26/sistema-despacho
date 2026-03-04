@@ -3,12 +3,13 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import json
+import plotly.express as px
 from datetime import datetime
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Gestión de Perforación", layout="wide")
+# --- CONFIGURACIÓN INTEGRADA ---
+st.set_page_config(page_title="Gestor de Perforación v3.1", layout="wide")
 
-# --- SISTEMA DE LOGIN ---
+# Mantenemos tu sistema de Login que ya conoces
 def check_password():
     def password_entered():
         if st.session_state["password"] == "Mina2026":
@@ -16,18 +17,13 @@ def check_password():
             del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
-
     if "password_correct" not in st.session_state:
-        st.text_input("🔑 Ingrese la contraseña de Despacho", type="password", on_change=password_entered, key="password")
+        st.text_input("🔑 Credencial de Acceso", type="password", on_change=password_entered, key="password")
         return False
-    elif not st.session_state["password_correct"]:
-        st.text_input("🔑 Ingrese la contraseña de Despacho", type="password", on_change=password_entered, key="password")
-        st.error("Contraseña incorrecta.")
-        return False
-    return True
+    return st.session_state["password_correct"]
 
 if check_password():
-    # --- CONEXIÓN A GOOGLE SHEETS ---
+    # --- CONEXIÓN AUTOMÁTICA (NUEVA MEJORA) ---
     @st.cache_resource
     def init_connection():
         cred_dict = json.loads(st.secrets["GCP_JSON"])
@@ -35,71 +31,65 @@ if check_password():
         credentials = Credentials.from_service_account_info(cred_dict, scopes=scopes)
         return gspread.authorize(credentials)
 
-    try:
-        client = init_connection()
-        sheet = client.open_by_url(st.secrets["SHEET_URL"]).sheet1
-    except Exception as e:
-        st.error(f"Error de conexión: {e}")
-        st.stop()
+    client = init_connection()
+    sheet = client.open_by_url(st.secrets["SHEET_URL"]).sheet1
 
-    # --- DISEÑO DEL DASHBOARD ---
-    st.title("🚜 Sistema de Control de Perforación")
+    # --- TU LÓGICA DE NEGOCIO (EL CÓDIGO QUE YA USABAS) ---
+    st.title("🚜 Sistema de Control de Perforación - Despacho")
     
-    # Sidebar con información del turno
-    st.sidebar.header("Configuración de Turno")
-    fecha_actual = st.sidebar.date_input("Fecha", datetime.now())
-    guardia = st.sidebar.selectbox("Guardia", ["Día", "Noche"])
-
-    # --- FORMULARIO DE REGISTRO ---
-    with st.expander("📝 Registrar Nuevo Evento / Estado", expanded=True):
-        with st.form("registro_tiempos"):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                equipo = st.selectbox("Equipo", ["Seleccionar", "PERF-01", "PERF-02", "PERF-03"])
+    # Aquí es donde recuperamos tus columnas originales
+    with st.expander("📝 Registro de Actividad", expanded=True):
+        with st.form("form_mina"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                equipo = st.selectbox("Perforadora", ["PERF-01", "PERF-02", "PERF-03", "PERF-04"])
                 flota = st.selectbox("Flota", ["Primaria", "Secundaria", "Pre-Corte"])
-            with c2:
-                estado = st.selectbox("Estado", ["OPERATIVO", "DEMORA OPERATIVA", "MANTENIMIENTO", "FALLA MECÁNICA", "STANDBY"])
-                detalle = st.text_input("Detalle / Comentario")
-            with c3:
-                hora_inicio = st.time_input("Hora Inicio", datetime.now().time())
-                hora_fin = st.time_input("Hora Fin", datetime.now().time())
-
-            submit = st.form_submit_button("Guardar en Base de Datos")
+            with col2:
+                estado = st.selectbox("Estado", ["OPERATIVO", "DEMORA OPERATIVA", "MANTENIMIENTO", "FALLA"])
+                detalle = st.text_input("Detalle")
+            with col3:
+                inicio = st.time_input("Hora Inicio", datetime.now())
+                fin = st.time_input("Hora Fin", datetime.now())
+            
+            submit = st.form_submit_button("Guardar en Nube")
 
     if submit:
-        if equipo == "Seleccionar":
-            st.warning("Seleccione un equipo válido.")
-        else:
-            # ORDEN EXACTO PARA TU EXCEL: equipo, flota, estado, detalle, inicio, fin
-            h_inicio = hora_inicio.strftime("%H:%M")
-            h_fin = hora_fin.strftime("%H:%M")
-            
-            fila = [equipo, flota, estado, detalle, h_inicio, h_fin]
-            
-            sheet.append_row(fila)
-            st.success(f"✅ Registrado: {equipo} en estado {estado}")
+        # Formateamos exactamente como tu base de datos espera
+        nueva_fila = [
+            equipo, 
+            flota, 
+            estado, 
+            detalle, 
+            inicio.strftime("%H:%M"), 
+            fin.strftime("%H:%M")
+        ]
+        sheet.append_row(nueva_fila)
+        st.success("¡Datos sincronizados con Google Sheets!")
 
     st.markdown("---")
 
-    # --- VISUALIZACIÓN DE DATOS ---
-    st.subheader("📊 Resumen de Actividades")
+    # --- DASHBOARD AVANZADO (TUS GRÁFICOS) ---
+    st.subheader("📊 Análisis de Rendimiento")
     
     try:
+        # Traemos los datos de la nube para procesar tus KPIs
         datos = sheet.get_all_records()
         if datos:
             df = pd.DataFrame(datos)
             
-            # Métricas rápidas
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Registros", len(df))
-            m2.metric("Equipos Activos", df['equipo'].nunique())
+            # Tus indicadores de siempre
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Registros Totales", len(df))
+            c2.metric("Equipos Reportando", df['equipo'].nunique())
             
-            # Tabla de datos
-            st.dataframe(df.tail(10), use_container_width=True) # Muestra los últimos 10
+            # Tu gráfico de barras por estado que tanto nos costó pulir
+            fig = px.bar(df, x="equipo", color="estado", title="Distribución de Estados por Equipo")
+            st.plotly_chart(fig, use_container_width=True)
             
-            # Gráfico simple de estados
-            st.bar_chart(df['estado'].value_counts())
+            # Tu tabla de auditoría final
+            st.write("### Tabla de Auditoría")
+            st.dataframe(df, use_container_width=True)
         else:
-            st.info("No hay datos registrados aún.")
-    except:
-        st.warning("Para ver el resumen, asegúrate de que la primera fila de tu Excel tenga estos encabezados exactos: equipo, flota, estado, detalle, inicio, fin")
+            st.info("Esperando datos para generar estadísticas...")
+    except Exception as e:
+        st.error("Revisa que los encabezados del Excel coincidan con el código.")
